@@ -16,7 +16,7 @@ def decode_value(value: str | None) -> str:
         return ""
     try:
         return str(make_header(decode_header(value))).strip()
-    except (LookupError, UnicodeError, ValueError):
+    except (AttributeError, LookupError, UnicodeError, ValueError):
         return value.encode("utf-8", "replace").decode("utf-8", "replace").strip()
 
 
