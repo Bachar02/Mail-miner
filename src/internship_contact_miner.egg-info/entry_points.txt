@@ -1,0 +1,2 @@
+[console_scripts]
+contact-miner = contact_miner.cli:main

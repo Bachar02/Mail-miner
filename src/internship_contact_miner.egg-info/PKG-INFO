@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: internship-contact-miner
+Version: 0.1.0
+Summary: Local-first extraction of professional contacts from internship emails
+Requires-Python: >=3.10
+Provides-Extra: app
+Requires-Dist: streamlit>=1.35; extra == "app"
+Requires-Dist: pandas>=2.0; extra == "app"
+Requires-Dist: openpyxl>=3.1; extra == "app"
+Provides-Extra: llm
+Requires-Dist: openai>=1.30; extra == "llm"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
