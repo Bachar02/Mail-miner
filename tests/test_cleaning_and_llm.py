@@ -102,3 +102,9 @@ def test_addresses_and_boilerplate_are_not_companies():
 
     assert _company_from_lines(["Porscheplatz 1"], "porsche.de") is None
     assert _company_from_lines(["Do Not Reply"], "donotreply.com") is None
+
+
+def test_ats_split_ignores_boilerplate_company():
+    from contact_miner.contact_extractor import split_ats_display_name
+
+    assert split_ats_display_name("ZEISS Workday - Do Not Reply", "z@myworkday.com") == ("ZEISS Workday", None)

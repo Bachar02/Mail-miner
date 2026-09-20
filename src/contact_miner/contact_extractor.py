@@ -68,7 +68,9 @@ def split_ats_display_name(display: str, address: str) -> tuple[str, str | None]
         return display, None
     parts = re.split(r"\s+[-–—|]\s+", display, maxsplit=1)
     if len(parts) == 2 and 1 < len(parts[0].split()) <= 4:
-        return parts[0].strip(), normalize_company(parts[1])
+        company = normalize_company(parts[1])
+        # "ZEISS Workday - Do Not Reply" names no employer
+        return parts[0].strip(), None if company_key(company) in _NOT_COMPANY_KEYS else company
     return display, None
 
 
