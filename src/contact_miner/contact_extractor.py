@@ -6,6 +6,7 @@ from typing import Iterable
 
 from .company_normalizer import (
     company_from_domain,
+    is_ats_domain,
     company_key,
     domain_from_email,
     is_generic_job_mailbox,
@@ -45,7 +46,8 @@ _NOT_NAME_WORDS = {
     "hi", "hello", "dear", "hey", "bonjour", "salut", "cher", "chère", "madame", "monsieur", "regards", "best",
     "thanks", "thank", "merci", "cordialement", "team", "équipe", "equipe", "l'équipe", "the", "service",
     "department", "département", "recruitment", "recrutement", "recruiting", "recruiter", "recruiters", "careers", "hr", "rh", "talent",
-    "acquisition", "sent", "from", "envoyé", "subject", "objet", "mobile", "phone", "tel", "tél", "linkedin",
+    "acquisition", "human", "resources", "ressources", "humaines", "jobs", "job", "info", "contact", "support",
+    "admin", "office", "notification", "notifications", "noreply", "alerts", "news", "sent", "from", "envoyé", "subject", "objet", "mobile", "phone", "tel", "tél", "linkedin",
     "www", "http", "https", "unsubscribe", "address", "adresse", "please", "note", "your", "our", "notre", "votre",
 }
 _INTERNSHIP_TERMS = re.compile(r"(?i)\b(internship|intern|stage|stagiaire|pfe|trainee|alternance|apprenti)")
@@ -56,7 +58,18 @@ _STATUS_RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("interview", re.compile(r"(?i)\binterview\b|\bentretien\b|schedule a call|technical test|test technique")),
     ("received", re.compile(r"(?i)received your application|application (?:was |has been )?received|bien reçu votre candidature|avons bien reçu")),
 )
+_NOT_COMPANY_KEYS = {"donotreply", "donotreply", "noreply", "nereplyplaspasrepondre", "confidential", "privacy", "unsubscribe"}
 MAX_HEADER_RECIPIENTS = 15
+
+
+def split_ats_display_name(display: str, address: str) -> tuple[str, str | None]:
+    """ATS relays send as "Marie Decrette - CVE Group": the employer is in the display name, not the domain."""
+    if not is_ats_domain(domain_from_email(address)):
+        return display, None
+    parts = re.split(r"\s+[-–—|]\s+", display, maxsplit=1)
+    if len(parts) == 2 and 1 < len(parts[0].split()) <= 4:
+        return parts[0].strip(), normalize_company(parts[1])
+    return display, None
 
 
 def clean_name(value: str | None, address: str | None = None) -> str | None:
@@ -93,13 +106,17 @@ def infer_contact_type(role: str | None, email: str) -> str | None:
     return None
 
 
-def _role_from_lines(lines: Iterable[str]) -> str | None:
+def _role_from_lines(lines: Iterable[str], domain: str | None = None) -> str | None:
+    domain_company = company_key(company_from_domain(domain))
     for line in lines:
         if len(line) > 90 or "@" in line:
             continue
         for segment in re.split(r"\s*[|•·,]\s*|\s+[-–—]\s+|\s+(?:at|chez|@)\s+", line):
+            # "Avelios Medical HR Team" names the employer, it is not the person's title
+            if domain_company and len(domain_company) >= 4 and domain_company in company_key(segment):
+                continue
             if ROLE_PATTERN.search(segment) and len(segment.split()) <= 7:
-                return segment.strip(" .")
+                return normalize_company(segment)
     return None
 
 
@@ -109,8 +126,14 @@ def _company_from_lines(lines: Iterable[str], domain: str | None) -> str | None:
         return None
     for line in lines:
         for segment in re.split(r"\s*[|•·,]\s*|\s+[-–—]\s+|\s+(?:at|chez)\s+", line):
+            segment = segment.strip()
             key = company_key(segment)
-            if key.startswith(domain_company) and len(segment.split()) <= 5 and "@" not in segment:
+            if "@" in segment or re.search(r"\w\.\w", segment) or len(segment.split()) > 5:
+                continue  # skip URLs and domains such as "usherbrooke.ca"
+            if any(char.isdigit() for char in segment) or key in _NOT_COMPANY_KEYS:
+                continue  # skip street addresses ("Porscheplatz 1") and boilerplate ("Do Not Reply")
+            # Short domain labels (ey, sap) must match exactly, or "EY Tower" would pass as the company.
+            if key == domain_company or (len(domain_company) >= 4 and key.startswith(domain_company)):
                 return normalize_company(segment)
     return None
 
@@ -154,7 +177,8 @@ def owner_addresses_for(email: ParsedEmail, owner_emails: Iterable[str] = ()) ->
     owners = {normalize_email(address) for address in owner_emails if address}
     owners.update(normalize_email(address) for address in email.delivered_to)
     if email.is_sent:
-        owners.update(normalize_email(address) for _, address in getaddresses([email.sender]) if address)
+        # Gmail labels some service mail (calendar invites, Drive shares) as Sent; those senders are not the owner.
+        owners.update(normalize_email(address) for _, address in getaddresses([email.sender]) if address and not is_noise_address(address))
     return owners
 
 
@@ -169,9 +193,13 @@ def extract_contacts(email: ParsedEmail, cleaned_body: str | None = None, owner_
         if "@" not in address or address in owners or is_noise_address(address):
             return None
         domain = domain_from_email(address)
+        company = company_from_domain(domain)
+        if name:
+            name, ats_company = split_ats_display_name(name, address)
+            company = company or ats_company
         return ContactCandidate(
             name=clean_name(name, address), email=address, source=source, source_message_id=email.message_id,
-            company=company_from_domain(domain), company_domain=domain, seen_at=email.date,
+            company=company, company_domain=domain, seen_at=email.date,
             evidence=[evidence[:500]], **context,
         )
 
@@ -199,7 +227,7 @@ def extract_contacts(email: ParsedEmail, cleaned_body: str | None = None, owner_
     if sender_address in found:
         contact = found[sender_address]
         signature_name = next((clean_name(line) for line in signature_lines[:3] if NAME_LINE.match(line) and clean_name(line)), None)
-        role = _role_from_lines(signature_lines)
+        role = _role_from_lines(signature_lines, contact.company_domain)
         company = _company_from_lines(signature_lines, contact.company_domain)
         name_confirmed = bool(signature_name) and (
             (contact.name and company_key(signature_name) == company_key(contact.name))
@@ -235,4 +263,9 @@ def extract_contacts(email: ParsedEmail, cleaned_body: str | None = None, owner_
 
     for candidate in found.values():
         candidate.contact_type = candidate.contact_type or infer_contact_type(candidate.role, candidate.email)
-    return [score_candidate(candidate) for candidate in found.values()]
+    scored = [score_candidate(candidate) for candidate in found.values()]
+    if email.is_bulk:  # newsletters and job alerts are kept for review, but rank below real correspondence
+        for candidate in scored:
+            candidate.confidence = round(max(candidate.confidence - 0.25, 0.05), 2)
+            candidate.confidence_reasons = [*candidate.confidence_reasons, "bulk or newsletter message"]
+    return scored

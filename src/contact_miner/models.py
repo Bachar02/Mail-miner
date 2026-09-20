@@ -64,7 +64,7 @@ class PipelineStats:
     emails_processed: int = 0
     relevant_emails: int = 0
     candidate_contacts: int = 0
-    contacts_created: int = 0
+    contacts_in_database: int = 0
     duplicates_merged: int = 0
     owner_addresses_excluded: int = 0
     errors: int = 0

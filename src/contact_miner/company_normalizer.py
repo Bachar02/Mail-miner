@@ -7,11 +7,20 @@ FREE_EMAIL_DOMAINS = {
     "msn.com", "yahoo.com", "yahoo.fr", "ymail.com", "icloud.com", "me.com", "aol.com", "gmx.com", "gmx.fr",
     "protonmail.com", "proton.me", "mail.com", "laposte.net", "orange.fr", "free.fr",
 }
+# Applicant-tracking systems relay mail for many employers: their domain is never the employer's company.
+ATS_DOMAINS = {
+    "myworkday.com", "teamtailor-mail.com", "teamtailor.com", "pinpoint.email", "recruitee.com", "welcomekit.co",
+    "smartrecruiters.com", "greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "workablemail.com",
+    "jobvite.com", "icims.com", "successfactors.com", "taleo.net", "bamboohr.com", "personio.de", "join.com",
+    "hibob.com", "factorialhr.com", "softgarden.io", "talentsoft.com", "flatchr.io", "applytojob.com",
+    "breezy.hr", "freshteam.com", "zohorecruit.com", "eightfold.ai", "avature.net", "cvwarehouse.com",
+}
+
 # Second-level labels used under country TLDs, e.g. company.co.uk or company.com.tn
 _SECOND_LEVEL = {"co", "com", "org", "net", "ac", "edu", "gov", "gouv", "ens", "nat"}
 
 NOISE_LOCAL_PATTERN = re.compile(
-    r"(?i)(^|[._+-])(no-?reply|do-?not-?reply|notifications?|notify|mailer-daemon|postmaster|bounces?|"
+    r"(?i)(^|[._+-])(no[-._]?reply|do[-._]?not[-._]?reply|notifications?|notify|mailer-daemon|postmaster|bounces?|"
     r"newsletters?|marketing|alerts?|jobalerts|digest|updates|news|info-?mail|automated|system)([._+-]|$)"
 )
 GENERIC_JOB_LOCALPARTS = {
@@ -56,10 +65,15 @@ def registrable_domain(domain: str | None) -> str | None:
     return ".".join(labels[-2:])
 
 
+def is_ats_domain(domain: str | None) -> bool:
+    return registrable_domain(domain) in ATS_DOMAINS if domain else False
+
+
 def normalize_company(value: str | None) -> str | None:
     if not value:
         return None
-    cleaned = re.sub(r"\s+", " ", value).strip(" .,-|")
+    cleaned = re.sub(r"[*_<>\[\]{}\|]", " ", value)  # markup left over from HTML or Markdown signatures
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .,;:!?-")
     return cleaned or None
 
 
@@ -68,7 +82,7 @@ def company_key(value: str | None) -> str:
 
 
 def company_from_domain(domain: str | None) -> str | None:
-    if not domain or is_free_email_domain(domain):
+    if not domain or is_free_email_domain(domain) or is_ats_domain(domain):
         return None
     registrable = registrable_domain(domain)
     if not registrable:

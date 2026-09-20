@@ -75,3 +75,30 @@ def test_migration_removes_legacy_duplicates(tmp_path):
     db = Database(path)
     assert len(db.rows("evidence")) == 1 and len(db.rows("applications")) == 1
     db.close()
+
+
+def test_ats_relay_names_and_company_cleanup():
+    from contact_miner.company_normalizer import company_from_domain, normalize_company
+    from contact_miner.contact_extractor import split_ats_display_name
+
+    assert company_from_domain("cvegroup.teamtailor-mail.com") is None
+    assert split_ats_display_name("Marie Decrette - CVE Group", "m@x.teamtailor-mail.com") == ("Marie Decrette", "CVE Group")
+    assert split_ats_display_name("Marie Decrette - CVE Group", "m@acme.com") == ("Marie Decrette - CVE Group", None)
+    assert normalize_company("*dida* *Datenschmiede GmbH*") == "dida Datenschmiede GmbH"
+    assert normalize_company("[wevioo]<") == "wevioo"
+
+
+def test_company_and_role_lines_are_distinguished():
+    from contact_miner.contact_extractor import _company_from_lines, _role_from_lines
+
+    lines = ["Antonia Lunau", "Talent Acquisition", "Avelios Medical HR Team", "usherbrooke.ca"]
+    assert _role_from_lines(lines, "avelios.com") == "Talent Acquisition"
+    assert _company_from_lines(["EY Tower", "Najet Amara"], "tn.ey.com") is None
+    assert _company_from_lines(["Talan Tunisie"], "talan.com") == "Talan Tunisie"
+
+
+def test_addresses_and_boilerplate_are_not_companies():
+    from contact_miner.contact_extractor import _company_from_lines
+
+    assert _company_from_lines(["Porscheplatz 1"], "porsche.de") is None
+    assert _company_from_lines(["Do Not Reply"], "donotreply.com") is None

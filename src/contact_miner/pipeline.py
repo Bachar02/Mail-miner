@@ -34,7 +34,6 @@ def run_deterministic(mbox_path: str | Path, db: Database, threshold: float = 2.
                 stats.candidate_contacts += len(candidates)
                 for candidate in candidates:
                     db.upsert_contact(candidate)
-                    stats.contacts_created += 1
         except Exception as error:
             stats.errors += 1
             logger.warning("Could not process message %s: %s", email.message_id, error)
@@ -44,6 +43,7 @@ def run_deterministic(mbox_path: str | Path, db: Database, threshold: float = 2.
     # Owner addresses discovered late in the mailbox may have been stored from earlier messages.
     stats.owner_addresses_excluded = db.delete_contacts(owners)
     db.commit()
+    stats.contacts_in_database = db.connection.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
     logger.info("processed=%s relevant=%s candidates=%s errors=%s", stats.emails_processed, stats.relevant_emails, stats.candidate_contacts, stats.errors)
     return stats
 
