@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any
+
+# Gmail Takeout writes system labels in the account language.
+SENT_LABELS = {"sent", "sent mail", "envoyés", "messages envoyés", "enviados", "gesendet", "inviati"}
 
 
 @dataclass
@@ -18,6 +20,13 @@ class ParsedEmail:
     html_body: str
     references: str = ""
     in_reply_to: str = ""
+    labels: list[str] = field(default_factory=list)
+    delivered_to: list[str] = field(default_factory=list)
+    is_bulk: bool = False
+
+    @property
+    def is_sent(self) -> bool:
+        return any(label.casefold() in SENT_LABELS for label in self.labels)
 
 
 @dataclass
@@ -40,6 +49,8 @@ class ContactCandidate:
     position_applied_for: str | None = None
     application_type: str | None = None
     application_year: int | None = None
+    application_status: str | None = None
+    seen_at: str | None = None
     evidence: list[str] = field(default_factory=list)
     confidence: float = 0.0
     confidence_reasons: list[str] = field(default_factory=list)
@@ -55,4 +66,5 @@ class PipelineStats:
     candidate_contacts: int = 0
     contacts_created: int = 0
     duplicates_merged: int = 0
+    owner_addresses_excluded: int = 0
     errors: int = 0

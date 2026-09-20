@@ -9,3 +9,5 @@ data/output/
 *.mbox
 *.sqlite3
 *.log
+*.egg-info/
+.benchmarks/
